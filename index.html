@@ -1,0 +1,84 @@
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Safe Audio Downloader</title>
+    <style>
+      body { font-family: system-ui, Arial; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+      label, input, button, textarea { display:block; width:100%; margin-top: 8px; }
+      input[type="text"] { padding: 8px; font-size: 16px; }
+      button { padding: 10px; font-size: 16px; margin-top: 12px; }
+      .note { font-size: 13px; color: #555; margin-top: 8px; }
+      .error { color: red; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>Safe Audio Downloader</h1>
+    <p>Paste a direct link to an audio file (e.g. https://example.com/song.mp3). Do not use links to streaming pages. Only download files you own or have permission to download.</p>
+
+    <label for="url">Audio file URL</label>
+    <input id="url" type="text" placeholder="https://..." />
+
+    <label>
+      <input id="confirm" type="checkbox" /> I confirm I have the right to download this audio file.
+    </label>
+
+    <button id="download">Download</button>
+
+    <div id="status" class="note"></div>
+    <div id="error" class="error"></div>
+
+    <script>
+      const btn = document.getElementById('download');
+      const urlInput = document.getElementById('url');
+      const confirmBox = document.getElementById('confirm');
+      const status = document.getElementById('status');
+      const error = document.getElementById('error');
+
+      btn.addEventListener('click', async () => {
+        error.textContent = '';
+        status.textContent = 'Checking...';
+        const url = urlInput.value.trim();
+        if (!url) { error.textContent = 'Please paste a URL.'; status.textContent = ''; return; }
+        if (!confirmBox.checked) { error.textContent = 'You must confirm rights.'; status.textContent = ''; return; }
+
+        try {
+          const resp = await fetch('/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, confirmRights: true })
+          });
+
+          if (!resp.ok) {
+            const body = await resp.json().catch(()=>({error:"Unknown error"}));
+            error.textContent = body.error || 'Server error';
+            status.textContent = '';
+            return;
+          }
+
+          // We expect an attachment stream; convert to blob and download via anchor
+          status.textContent = 'Downloading...';
+          const blob = await resp.blob();
+          const cd = resp.headers.get('content-disposition') || '';
+          let filename = 'audio';
+          const match = /filename="([^"]+)"/.exec(cd);
+          if (match) filename = match[1];
+
+          const urlBlob = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = urlBlob;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(urlBlob);
+          status.textContent = 'Download started.';
+        } catch (err) {
+          error.textContent = 'Error: ' + (err.message || err);
+          status.textContent = '';
+        }
+      });
+    </script>
+  </body>
+</html>
